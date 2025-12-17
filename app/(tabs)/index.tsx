@@ -63,21 +63,21 @@ export default function HomeScreen() {
           <ThemedText type="subtitle"> Live2D测试页面 (react-native-live2d)</ThemedText>
         </Link>
         <ThemedText>
-          使用 react-native-live2d 的新方案，支持真正的流式音频播放。
+          测试 Live2D 角色渲染、动画控制和表情切换功能（基于 Cubism SDK + mao_pro 模型）。
         </ThemedText>
 
         <Link href="/audio-test">
           <ThemedText type="subtitle">🎤 音频测试页面 (react-native-pcm-stream)</ThemedText>
         </Link>
         <ThemedText>
-          使用 react-native-pcm-stream 的新方案，支持真正的流式音频播放。
+          测试 PCM 音频播放、音频数据处理和格式转换功能（16kHz/16bit）。
         </ThemedText>
         
         <Link href="/pcmstream-test">
           <ThemedText type="subtitle" style={{ color: '#FF9800' }}>🚀 PCMStream音频测试 (推荐)</ThemedText>
         </Link>
         <ThemedText>
-          使用 react-native-pcm-stream 的新方案，支持真正的流式音频播放。
+          测试 WebSocket 实时音频流播放和唇形同步功能（推荐使用此页面测试完整功能）。
         </ThemedText>
       </ThemedView>
     </ParallaxScrollView>
