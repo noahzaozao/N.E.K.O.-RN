@@ -1,16 +1,18 @@
 import { ThemedView } from '@/components/themed-view';
-import { WSService, type WSServiceConfig } from '@/services/wsService';
 import { AudioService } from '@/services/AudioService';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Button, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Button, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 
 export default function ExploreScreen() {
 	const audioServiceRef = useRef<AudioService | null>(null);
-	const wsServiceRef = useRef<WSService | null>(null);
+	const lastQueueClearAtMsRef = useRef<number>(0);
 	const [isSessionActive, setIsSessionActive] = useState<boolean>(false);
 	const [isConnected, setIsConnected] = useState<boolean>(false);
 	const [messages, setMessages] = useState<Array<{ id: string; text: string; sender: string; timestamp: string }>>([]);
+	const [isRecording, setIsRecording] = useState<boolean>(false);
+	const [isPlaying, setIsPlaying] = useState<boolean>(false);
+	const [focusModeState, setFocusModeState] = useState<boolean>(false);
 
 	const port = 48911;
 	const host = '192.168.88.38';
@@ -29,16 +31,59 @@ export default function ExploreScreen() {
 			},
 			onConnectionChange: (connected) => {
 				setIsConnected(connected);
+			},
+			onMessage: (event) => {
+				handleWsMessage(event);
+			},
+			onRecordingStateChange: (recording) => {
+				setIsRecording(recording);
+			},
+			onAudioStatsUpdate: (stats) => {
+				setIsPlaying(stats.isPlaying);
 			}
 		});
 
-		initWSService();
+		// 初始化 AudioService
+		audioServiceRef.current.init().catch((error) => {
+			console.error('AudioService 初始化失败:', error);
+			Alert.alert('初始化失败', error.message || '未知错误');
+		});
 
 		return () => {
 			audioServiceRef.current?.destroy();
-			wsServiceRef.current?.destroy();
 		};
 	}, []);
+
+	// 统一处理 WebSocket 消息
+	const handleWsMessage = (event: MessageEvent) => {
+		// 处理二进制音频数据
+		if (event.data instanceof Blob) {
+			console.log("收到新的音频块 (Blob)");
+			audioServiceRef.current?.handleAudioBlob(event.data);
+			return;
+		}
+
+		// 处理ArrayBuffer类型的音频数据（React Native可能是这种格式）
+		if (event.data instanceof ArrayBuffer) {
+			console.log("收到ArrayBuffer音频数据，长度:", event.data.byteLength);
+			audioServiceRef.current?.handleAudioArrayBuffer(event.data);
+			return;
+		}
+
+		// 处理空数组
+		if (Array.isArray(event.data) && event.data.length === 0) {
+			console.log("收到空数组消息");
+			return;
+		}
+
+		// 处理JSON消息
+		try {
+			const data = JSON.parse(event.data);
+			handleWsJsonMessage(data);
+		} catch (error) {
+			console.error('处理WebSocket消息失败:', error);
+		}
+	};
 
 	// 统一处理 WebSocket JSON 消息
 	const handleWsJsonMessage = (data: any) => {
@@ -82,7 +127,7 @@ export default function ExploreScreen() {
 				const msg: string = data?.message ?? '';
 				if (typeof msg === 'string' && msg.includes('失联了，即将重启')) {
 					// 与 Web 行为对齐：先结束当前会话，再延时重启
-					const shouldRestart = audioServiceRef.current?.getIsSessionActive?.() || isRecording;
+					const shouldRestart = audioServiceRef.current?.getIsSessionActive() || isRecording;
 					if (shouldRestart) {
 						console.log('检测到失联状态，执行自动重启会话');
 						(async () => {
@@ -146,78 +191,31 @@ export default function ExploreScreen() {
 		}
 	};
 
-	// 初始化WebSocket服务
-	const initWSService = () => {
-		const wsConfig: WSServiceConfig = {
-			host: host,
-			port: port,
-			characterName: lanlanName,
-			onOpen: () => {
-				console.log('WebSocket连接建立成功，准备接收消息');
-				// 设置AudioService的WebSocket引用
-				if (audioServiceRef.current && wsServiceRef.current) {
-					const ws = wsServiceRef.current.getWebSocket();
-					if (ws) {
-						audioServiceRef.current.setWebSocket(ws);
-					}
-				}
-			},
-			onMessage: (event: MessageEvent) => {
-				// 处理二进制音频数据
-				if (event.data instanceof Blob) {
-					console.log("收到新的音频块");
-					audioServiceRef.current?.handleAudioBlob(event.data);
-					return;
-				}
-
-				// 处理空数组（可能是空的音频数据或特殊信号）
-				if (Array.isArray(event.data) && event.data.length === 0) {
-					console.log("收到空数组消息（可能是音频数据）:", event.data);
-					return;
-				}
-
-				// 处理ArrayBuffer类型的音频数据（React Native中可能是这种格式）
-				if (event.data instanceof ArrayBuffer) {
-					console.log("收到ArrayBuffer音频数据，长度:", event.data.byteLength);
-					audioServiceRef.current?.handleAudioArrayBuffer(event.data);
-					return;
-				}
-
-				// 处理JSON消息
-				try {
-					const data = JSON.parse(event.data);
-					handleWsJsonMessage(data);
-				} catch (error) {
-					console.error('处理WebSocket消息失败:', error);
-				}
-			},
-			onError: (error: Event) => {
-				console.error('WebSocket连接错误:', error);
-			},
-			onClose: (event: CloseEvent) => {
-				console.log('WebSocket连接已关闭');
-			}
-		};
-
-		wsServiceRef.current = new WSService(wsConfig);
-		wsServiceRef.current.init();
-	};
-
 	// 开始AI通话会话
 	const startAICall = async () => {
 		if (audioServiceRef.current) {
-			await audioServiceRef.current.startAICall();
-			setIsSessionActive(audioServiceRef.current.getIsSessionActive());
-			setIsRecording(audioServiceRef.current.getIsRecording());
+			try {
+				await audioServiceRef.current.startAICall();
+				setIsSessionActive(audioServiceRef.current.getIsSessionActive());
+				setIsRecording(audioServiceRef.current.getIsRecording());
+			} catch (error) {
+				console.error('开始通话失败:', error);
+				Alert.alert('错误', '开始通话失败');
+			}
 		}
 	};
 
 	// 结束AI通话会话
 	const endAICall = async () => {
 		if (audioServiceRef.current) {
-			await audioServiceRef.current.endAICall();
-			setIsSessionActive(audioServiceRef.current.getIsSessionActive());
-			setIsRecording(audioServiceRef.current.getIsRecording());
+			try {
+				await audioServiceRef.current.endAICall();
+				setIsSessionActive(audioServiceRef.current.getIsSessionActive());
+				setIsRecording(audioServiceRef.current.getIsRecording());
+			} catch (error) {
+				console.error('结束通话失败:', error);
+				Alert.alert('错误', '结束通话失败');
+			}
 		}
 	};
 
@@ -231,16 +229,13 @@ export default function ExploreScreen() {
 					AI通话状态: {isSessionActive ? '通话中' : '未通话'}
 				</Text>
 				<Text style={styles.statusText}>
-					WebSocket: {wsServiceRef.current?.isConnected() ? '已连接' : '未连接'}
+					WebSocket: {isConnected ? '已连接' : '未连接'}
 				</Text>
 				{isRecording && (
 					<Text style={styles.statusText}>录音状态: 录音中</Text>
 				)}
 				{isPlaying && (
 					<Text style={styles.statusText}>播放状态: 播放中</Text>
-				)}
-				{focusModeState && (
-					<Text style={styles.statusText}>专注模式: 开启</Text>
 				)}
 			</View>
 

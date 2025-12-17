@@ -54,7 +54,8 @@ export class AudioService {
   private pcmStreamService: AndroidPCMStreamService | null = null;
   private connectionStatus: ConnectionStatus = ConnectionStatus.DISCONNECTED;
   private isInitialized: boolean = false;
-  private statsUpdateInterval: NodeJS.Timeout | null = null;
+  private statsUpdateInterval: ReturnType<typeof setInterval> | null = null;
+  private isSessionActive: boolean = false;
 
   constructor(config: AudioServiceConfig) {
     this.config = config;
@@ -275,6 +276,7 @@ export class AudioService {
     };
 
     this.wsService.send(JSON.stringify(sessionMessage));
+    this.isSessionActive = true;
     console.log('📤 已发送 start_session');
   }
 
@@ -292,7 +294,98 @@ export class AudioService {
     };
 
     this.wsService.send(JSON.stringify(sessionMessage));
+    this.isSessionActive = false;
     console.log('📤 已发送 end_session');
+  }
+
+  /**
+   * 开始 AI 通话（外部调用接口）
+   */
+  async startAICall(): Promise<void> {
+    if (!this.isInitialized) {
+      throw new Error('AudioService 未初始化');
+    }
+
+    if (this.isSessionActive) {
+      console.warn('⚠️ 会话已经激活');
+      return;
+    }
+
+    try {
+      await this.startRecording();
+      console.log('📞 AI 通话已开始');
+    } catch (error) {
+      console.error('❌ 开始 AI 通话失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 结束 AI 通话（外部调用接口）
+   */
+  async endAICall(): Promise<void> {
+    if (!this.isSessionActive) {
+      console.warn('⚠️ 会话未激活');
+      return;
+    }
+
+    try {
+      await this.stopRecording();
+      console.log('📞 AI 通话已结束');
+    } catch (error) {
+      console.error('❌ 结束 AI 通话失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取会话是否激活
+   */
+  getIsSessionActive(): boolean {
+    return this.isSessionActive;
+  }
+
+  /**
+   * 处理 Base64 音频数据（Web 平台）
+   * TODO: Web 平台实现
+   */
+  handleBase64Audio(audioData: string, isNewMessage: boolean = false): void {
+    // TODO: Web 平台实现
+    console.warn('⚠️ handleBase64Audio 暂未实现（预留 Web 平台）');
+  }
+
+  /**
+   * 处理状态更新消息
+   */
+  handleStatusUpdate(data: any): void {
+    // 处理状态更新逻辑
+    console.log('📊 状态更新:', data);
+  }
+
+  /**
+   * 处理 Blob 音频数据（Web 平台）
+   * TODO: Web 平台实现
+   */
+  handleAudioBlob(blob: Blob): void {
+    // TODO: Web 平台实现
+    console.warn('⚠️ handleAudioBlob 暂未实现（预留 Web 平台）');
+  }
+
+  /**
+   * 处理 ArrayBuffer 音频数据
+   */
+  handleAudioArrayBuffer(arrayBuffer: ArrayBuffer): void {
+    // 直接播放 PCM 数据
+    this.playPCMData(arrayBuffer);
+  }
+
+  /**
+   * 设置 WebSocket 实例（用于外部管理 WebSocket）
+   * 注意：通常不建议使用，建议让 AudioService 自己管理 WebSocket
+   */
+  setWebSocket(ws: WebSocket): void {
+    console.warn('⚠️ setWebSocket 已弃用，建议让 AudioService 自己管理 WebSocket');
+    // 不做任何操作，保持向后兼容
   }
 
   /**
