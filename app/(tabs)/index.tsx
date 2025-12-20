@@ -59,7 +59,21 @@ export default function HomeScreen() {
         </Link>
       </ThemedView>
       <ThemedView style={styles.stepContainer}>
-      <Link href="/rnlive2d">
+        <Link href="/qr-scanner">
+          <ThemedText type="subtitle">扫码配置（Dev）</ThemedText>
+        </Link>
+        <ThemedText>
+          扫码配置（Dev）
+        </ThemedText>
+
+        <Link href={'/request-lab' as any}>
+          <ThemedText type="subtitle">🧪 Request/组件实验室</ThemedText>
+        </Link>
+        <ThemedText>
+          测试 `@project_neko/request`（token/刷新/队列）以及基础 UI 组件。
+        </ThemedText>
+
+        <Link href="/rnlive2d">
           <ThemedText type="subtitle"> Live2D测试页面 (react-native-live2d)</ThemedText>
         </Link>
         <ThemedText>
